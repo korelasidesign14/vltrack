@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kalkulator Pasien Eligible Viral Load</title>
+<style>
+:root{--bg:#f4f7f6;--card:#fff;--ink:#16282b;--mute:#5d7074;--line:#d8e2e0;--acc:#0f766e;--acc2:#e6f4f1;--warn:#b45309;--err:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1a1c;--card:#16262a;--ink:#e6efee;--mute:#93a8ab;--line:#28393d;--acc:#3fc1b3;--acc2:#16373a;--warn:#f0b35a;--err:#ff8a7a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:28px 16px 60px}
+h1{font-size:1.6rem;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--mute);margin:0 0 22px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:26px;text-align:center;cursor:pointer;transition:.15s}
+.drop:hover,.drop.on{border-color:var(--acc);background:var(--acc2)}
+.drop b{display:block;font-size:1.05rem}
+.drop span{color:var(--mute);font-size:.9rem}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--mute)}
+input[type=date],input[type=search]{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink)}
+button{font:inherit;padding:8px 13px;border:1px solid var(--line);border-radius:7px;background:var(--card);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--acc)}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+@media(prefers-color-scheme:dark){button.pri{color:#06201d}}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat.main{background:var(--acc);border-color:var(--acc);color:#fff}
+@media(prefers-color-scheme:dark){.stat.main{color:#06201d}}
+.stat .n{font-size:2rem;font-weight:700;line-height:1.1}
+.stat .l{font-size:.85rem;opacity:.85}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--card)}
+.tag{padding:2px 8px;border-radius:99px;font-size:.8rem;background:var(--acc2);color:var(--acc);font-weight:600}
+.tag.l{background:#fdf1e0;color:var(--warn)}
+@media(prefers-color-scheme:dark){.tag.l{background:#3a2c14}}
+.note{color:var(--mute);font-size:.85rem}
+.err{color:var(--err);font-weight:600}
+.warn{color:var(--warn)}
+.hide{display:none}
+.head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+</style>
+</head>
+<body>
+<main>
+<h1>Kalkulator Pasien Eligible Viral Load</h1>
+<p class="sub">Unggah file kunjungan (.xlsx), pilih periode, dan lihat pasien yang jatuh tempo tes VL. Semua data diproses di browser Anda dan tidak dikirim ke server mana pun.</p>
+
+<div class="panel">
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Pilih file Excel">
+    <b id="fname">Seret file Excel ke sini atau klik untuk memilih</b>
+    <span>Kolom yang dibaca: <i>Tanggal Mulai ART</i> (wajib), Pasien ID, Nama Pasien, NIK (opsional)</span>
+    <input type="file" id="file" accept=".xlsx,.xls,.csv" class="hide">
+  </div>
+  <p id="msg" class="note" style="margin:10px 0 0"></p>
+</div>
+
+<div id="app" class="hide">
+  <div class="panel">
+    <div class="row">
+      <label>Dari tanggal<input type="date" id="from"></label>
+      <label>Sampai tanggal<input type="date" id="to"></label>
+      <button class="pri" id="go">Hitung</button>
+      <button data-p="cur">Bulan ini</button>
+      <button data-p="prev">Bulan lalu</button>
+      <button data-p="next">Bulan depan</button>
+      <button data-p="year">Tahun ini</button>
+    </div>
+    <p class="note" style="margin:12px 0 0">Aturan: VL pertama = 6 bulan setelah mulai ART. VL berikutnya = setiap tahun sejak mulai ART (12, 24, 36 bulan, dst).</p>
+  </div>
+
+  <div class="stats">
+    <div class="stat main"><div class="n" id="s-pas">0</div><div class="l">Pasien eligible di periode</div></div>
+    <div class="stat"><div class="n" id="s-first">0</div><div class="l">VL pertama (6 bulan)</div></div>
+    <div class="stat"><div class="n" id="s-next">0</div><div class="l">VL lanjutan (tahunan)</div></div>
+    <div class="stat"><div class="n" id="s-tot">0</div><div class="l">Total pasien di file</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="head">
+      <input type="search" id="q" placeholder="Cari ID atau nama" aria-label="Cari">
+      <button id="exp">Unduh hasil (.xlsx)</button>
+    </div>
+    <div class="tw"><table>
+      <thead><tr><th>Pasien ID</th><th>Nama</th><th>Mulai ART</th><th>VL ke-</th><th>Jadwal VL</th><th>Jenis</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table></div>
+    <p id="empty" class="note hide">Tidak ada pasien eligible pada periode ini.</p>
+    <p id="skip" class="note warn"></p>
+  </div>
+</div>
+</main>
+
+<script src="xlsx.full.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let patients=[],skipped=0,result=[];
+
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
+const fmt=d=>pad(d.getUTCDate())+'/'+pad(d.getUTCMonth()+1)+'/'+d.getUTCFullYear();
+const utc=(y,m,d)=>new Date(Date.UTC(y,m,d));
+
+function addMonths(d,n){
+  const t=d.getUTCFullYear()*12+d.getUTCMonth()+n, y=Math.floor(t/12), m=t%12;
+  const last=new Date(Date.UTC(y,m+1,0)).getUTCDate();
+  return utc(y,m,Math.min(d.getUTCDate(),last));
+}
+
+function toDate(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number'&&v>20000&&v<80000){const d=new Date(Math.round((v-25569)*864e5));return utc(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())}
+  if(v instanceof Date)return utc(v.getFullYear(),v.getMonth(),v.getDate());
+  const s=String(v).trim();let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return utc(+m[1],m[2]-1,+m[3]);
+  if(m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/))return utc(+m[3],m[2]-1,+m[1]);
+  return null;
+}
+
+// Jadwal VL ke-n: n=1 -> +6 bulan; n>=2 -> +12*(n-1) bulan
+const offset=n=>n===1?6:12*(n-1);
+
+function parse(buf){
+  const wb=XLSX.read(buf,{type:'array'});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null});
+  const norm=s=>String(s??'').toLowerCase().replace(/\s+/g,' ').trim();
+  let h=-1;
+  for(let i=0;i<Math.min(rows.length,15);i++){if(rows[i].some(c=>norm(c)==='tanggal mulai art')){h=i;break}}
+  if(h<0)throw new Error('Kolom "Tanggal Mulai ART" tidak ditemukan di 15 baris pertama.');
+  const hd=rows[h].map(norm);
+  const col=(...names)=>hd.findIndex(x=>names.includes(x));
+  const cArt=col('tanggal mulai art'),cId=col('pasien id'),cNm=col('nama pasien','nama'),cNik=col('nik/no. identitas','nik');
+  const seen=new Set();patients=[];skipped=0;
+  for(let i=h+1;i<rows.length;i++){
+    const r=rows[i];if(!r||r.every(c=>c==null||c===''))continue;
+    const art=toDate(r[cArt]);
+    if(!art){skipped++;continue}
+    const id=cId>=0?String(r[cId]??''):'';
+    const key=id||(cNik>=0?String(r[cNik]):'')||('row'+i);
+    if(seen.has(key))continue;seen.add(key);
+    patients.push({id,nama:cNm>=0?String(r[cNm]??''):'',art});
+  }
+  if(!patients.length)throw new Error('Tidak ada baris dengan Tanggal Mulai ART yang valid.');
+}
+
+function compute(){
+  const f=toDate($('from').value),t=toDate($('to').value);
+  if(!f||!t||f>t){$('msg').innerHTML='<span class="err">Periode tidak valid. Pastikan tanggal awal tidak melewati tanggal akhir.</span>';return}
+  $('msg').textContent='';
+  result=[];
+  for(const p of patients){
+    for(let n=1;;n++){
+      const d=addMonths(p.art,offset(n));
+      if(d>t)break;
+      if(d>=f)result.push({...p,n,due:d});
+    }
+  }
+  result.sort((a,b)=>a.due-b.due||a.id.localeCompare(b.id));
+  const uniq=new Set(result.map(r=>r.id||r.nama+r.art)).size;
+  $('s-pas').textContent=uniq;
+  $('s-first').textContent=result.filter(r=>r.n===1).length;
+  $('s-next').textContent=result.filter(r=>r.n>1).length;
+  $('s-tot').textContent=patients.length;
+  $('skip').textContent=skipped?skipped+' baris dilewati karena Tanggal Mulai ART kosong atau tidak terbaca.':'';
+  render();
+}
+
+function render(){
+  const q=$('q').value.toLowerCase();
+  const list=result.filter(r=>!q||r.id.toLowerCase().includes(q)||r.nama.toLowerCase().includes(q));
+  $('tb').innerHTML=list.map(r=>`<tr><td>${esc(r.id)}</td><td>${esc(r.nama)}</td><td>${fmt(r.art)}</td><td>${r.n}</td><td>${fmt(r.due)}</td><td><span class="tag ${r.n>1?'l':''}">${r.n===1?'VL pertama':'VL lanjutan'}</span></td></tr>`).join('');
+  $('empty').classList.toggle('hide',list.length>0);
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function preset(p){
+  const n=new Date(),y=n.getFullYear(),m=n.getMonth();let a,b;
+  if(p==='cur'){a=utc(y,m,1);b=utc(y,m+1,0)}
+  if(p==='prev'){a=utc(y,m-1,1);b=utc(y,m,0)}
+  if(p==='next'){a=utc(y,m+1,1);b=utc(y,m+2,0)}
+  if(p==='year'){a=utc(y,0,1);b=utc(y,11,31)}
+  $('from').value=iso(a);$('to').value=iso(b);compute();
+}
+
+function load(file){
+  if(!file)return;
+  $('fname').textContent=file.name;$('msg').textContent='Membaca file...';
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{parse(e.target.result);$('app').classList.remove('hide');$('msg').textContent=patients.length+' pasien terbaca.';preset('cur')}
+    catch(err){$('app').classList.add('hide');$('msg').innerHTML='<span class="err">'+esc(err.message)+'</span>'}
+  };
+  rd.onerror=()=>{$('msg').innerHTML='<span class="err">File tidak bisa dibaca.</span>'};
+  rd.readAsArrayBuffer(file);
+}
+
+const drop=$('drop');
+drop.onclick=()=>$('file').click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}};
+$('file').onchange=e=>load(e.target.files[0]);
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('on')}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('on')}));
+drop.addEventListener('drop',e=>load(e.dataTransfer.files[0]));
+$('go').onclick=compute;
+$('q').oninput=render;
+document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>preset(b.dataset.p));
+$('exp').onclick=()=>{
+  if(!result.length)return;
+  const data=result.map(r=>({'Pasien ID':r.id,'Nama':r.nama,'Tanggal Mulai ART':fmt(r.art),'VL ke-':r.n,'Jadwal VL':fmt(r.due),'Jenis':r.n===1?'VL pertama':'VL lanjutan'}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(data),'Eligible VL');
+  XLSX.writeFile(wb,'eligible_vl_'+$('from').value+'_sd_'+$('to').value+'.xlsx');
+};
+</script>
+</body>
+</html>
